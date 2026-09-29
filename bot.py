@@ -60,6 +60,37 @@ def obsidian_cli(*args):
     return proc.stdout
 
 
+def extract_json(text):
+    """Tolerantes JSON-Lesen: notfalls ersten {...}-Block aus Begleittext fischen."""
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    start = text.find("{")
+    if start < 0:
+        raise ValueError("kein JSON gefunden")
+    depth, in_str, esc = 0, False, False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+        else:
+            if ch == '"':
+                in_str = True
+            elif ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    return json.loads(text[start:i + 1])
+    raise ValueError("kein vollständiges JSON gefunden")
+
+
 def deepseek_parse(api_key, model, prompt, text):
     today = datetime.now(BERLIN).strftime("%d.%m.%Y")
     payload = {
@@ -74,7 +105,12 @@ def deepseek_parse(api_key, model, prompt, text):
     }
     resp = http_json(DEEPSEEK_API, payload,
                      headers={"Authorization": f"Bearer {api_key}"}, timeout=60)
-    return json.loads(resp["choices"][0]["message"]["content"])
+    raw = resp["choices"][0]["message"]["content"]
+    try:
+        return extract_json(raw)
+    except ValueError:
+        print(f"DeepSeek-Rohantwort (Parse-Fehler): {raw[:300]}")
+        raise
 
 
 HELP_TEXT = (
