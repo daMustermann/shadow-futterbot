@@ -96,7 +96,7 @@ def deepseek_parse(api_key, model, prompt, text):
     payload = {
         "model": model,
         "temperature": 0.2,
-        "max_tokens": 400,
+        "max_tokens": 1000,
         "response_format": {"type": "json_object"},
         "messages": [
             {"role": "system", "content": prompt},
@@ -105,11 +105,14 @@ def deepseek_parse(api_key, model, prompt, text):
     }
     resp = http_json(DEEPSEEK_API, payload,
                      headers={"Authorization": f"Bearer {api_key}"}, timeout=60)
-    raw = resp["choices"][0]["message"]["content"]
+    choice = resp["choices"][0]
+    raw = choice["message"]["content"]
+    if choice.get("finish_reason") != "stop":
+        print(f"DeepSeek finish_reason={choice.get('finish_reason')}, Rohantwort: {raw[:500]}")
     try:
         return extract_json(raw)
     except ValueError:
-        print(f"DeepSeek-Rohantwort (Parse-Fehler): {raw[:300]}")
+        print(f"DeepSeek-Rohantwort (Parse-Fehler): {raw[:500]}")
         raise
 
 
@@ -222,6 +225,7 @@ def main():
             print(f"Update {uid} aelter als 24h – still uebersprungen.")
             continue
         text = (msg.get("text") or "").strip()
+        print(f"Eingang von {msg.get('chat', {}).get('id')}: {text[:120]}")
         if not text:
             reply = "Ich verstehe nur Text 😺 – tippe oder nutze das Mikrofon deiner Tastatur (Diktat). Sprachnachrichten kann ich leider nicht abhören."
         elif text.startswith("/start") or text.startswith("/help"):

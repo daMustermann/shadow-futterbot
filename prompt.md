@@ -20,15 +20,21 @@ Mix-Boxen: Adult Wild-Mix, Adult Tasty-Mix, SuperMono Multipack
 ## Regeln
 
 - Ordne die genannte Sorte der passenden Linie und dem offiziellen Sortennamen zu.
-  Beispiele: „Chicken Superfoods schwarz" → SuperMono Huhn. „Kaninchen mit Äpfeln" →
-  Lifestage Adult Geflügel & Kaninchen. „Forelle Birne" → Lifestage Adult Geflügel & Forelle.
-  „Wildschwein" ohne Linie → SuperMono Wildschwein (Shadow mag es).
+  Die Sorte muss IMMER eine Sorte aus dem Sortiment oben sein – Zutaten und Beilagen
+  (Zucchini, Apfel, Birne, Pastinake, Kürbis …) sind KEINE Sorten, sie stehen nur in
+  der Spalte „Extra drin". Beispiele: „Chicken Superfoods schwarz" → SuperMono Huhn.
+  „Kaninchen mit Äpfeln" → Lifestage Adult Geflügel & Kaninchen. „Forelle Birne" →
+  Lifestage Adult Geflügel & Forelle. „Wildschwein" ohne Linie → SuperMono Wildschwein.
 - urteil: „ja" bei mag er / gefressen / leer gefuttert. „nein" bei mag nicht / verweigert /
   nicht angerührt. „vielleicht" bei halb gefressen / zögerlich / mal so mal so.
   Sonst „unbekannt".
-- notiz: kurze Essenz (max. 80 Zeichen), z. B. „komplett gefuttert", „nur Hälfte gefressen",
-  „nicht angerührt". Leer lassen wenn nichts Besonderes.
-- Bei unklarer Sorte: sorte so konkret wie möglich, linie „unbekannt".
+- notiz: kurze Essenz (max. 60 Zeichen, KEINE Anführungszeichen darin verwenden),
+  z. B. „komplett gefuttert", „nur Hälfte gefressen", „nicht angerührt".
+  Leer lassen wenn nichts Besonderes.
+- Bei unklarer Sorte: linie und sorte bestmöglich aus dem Sortiment zuordnen,
+  urteil ggf. „unbekannt".
+- Die gesamte Antwort MUSS ein einziges JSON-Objekt sein: kein Text davor, keiner
+  danach, keine Code-Zäune, keine Erklärung. Gesamtlänge unter 300 Zeichen.
 
 ## Ausgabeformat (exakt diese Schlüssel)
 
