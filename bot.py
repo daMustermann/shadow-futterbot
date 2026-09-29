@@ -60,10 +60,10 @@ def obsidian_cli(*args):
     return proc.stdout
 
 
-def deepseek_parse(api_key, prompt, text):
+def deepseek_parse(api_key, model, prompt, text):
     today = datetime.now(BERLIN).strftime("%d.%m.%Y")
     payload = {
-        "model": "deepseek-chat",
+        "model": model,
         "temperature": 0.2,
         "max_tokens": 400,
         "response_format": {"type": "json_object"},
@@ -98,7 +98,7 @@ def already_entered_today(content, kern, today):
 def handle_message(text):
     """Parst eine Nachricht und traegt sie ein. Gibt Antworttext zurueck (None = still)."""
     try:
-        parsed = deepseek_parse(CFG["deepseek_key"], CFG["prompt"], text)
+        parsed = deepseek_parse(CFG["deepseek_key"], CFG["deepseek_model"], CFG["prompt"], text)
     except Exception as e:
         print(f"DeepSeek-Fehler: {e}")
         return "Hoppala 😿 – das habe ich gerade nicht verstanden. Schreib es mir bitte noch einmal anders."
@@ -217,6 +217,7 @@ if __name__ == "__main__":
         "tg_token": env("TELEGRAM_TOKEN"),
         "tg_chat": str(env("TELEGRAM_CHAT_ID")),
         "deepseek_key": env("DEEPSEEK_API_KEY"),
+        "deepseek_model": os.environ.get("DEEPSEEK_MODEL", "deepseek-flash"),
         "offset_file": os.environ.get("OFFSET_FILE", "offset.json"),
         "couch": {
             "url": env("OBSIDIAN_COUCH_URL"),
