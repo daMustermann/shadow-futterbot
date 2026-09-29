@@ -36,8 +36,9 @@ Telegram (@mauderbot) ──alle 5 Min──► GitHub Action ──► DeepSeek
 | `OBSIDIAN_COUCH_PASS` | CouchDB-Passwort |
 | `OBSIDIAN_COUCH_DB` | Datenbankname des Vaults |
 
-Zusätzlich legt der Bot einmalig die CouchDB-Datenbank `bot_state` an
-(merkt sich die Telegram-Update-ID – braucht Admin-Rechte des CouchDB-Users).
+Zusätzlich merkt sich der Bot die Telegram-Update-ID in `offset.json`
+(in Actions per Cache persistiert) – so wird keine Nachricht doppelt verarbeitet.
+Doppelte Einträge erkennt er außerdem am Inhalt und antwortet dann nicht erneut.
 
 ## Dateien
 

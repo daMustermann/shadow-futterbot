@@ -25,9 +25,17 @@ jobs:
       - name: Abhängigkeiten installieren
         run: pip install -r requirements.txt
 
+      - name: Offset wiederherstellen
+        uses: actions/cache/restore@v4
+        with:
+          path: offset.json
+          key: telegram-offset-${{ github.run_id }}
+          restore-keys: telegram-offset-
+
       - name: Telegram abholen & Futterliste pflegen
         run: python bot.py
         env:
+          OFFSET_FILE: offset.json
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
@@ -35,3 +43,10 @@ jobs:
           OBSIDIAN_COUCH_USER: ${{ secrets.OBSIDIAN_COUCH_USER }}
           OBSIDIAN_COUCH_PASS: ${{ secrets.OBSIDIAN_COUCH_PASS }}
           OBSIDIAN_COUCH_DB: ${{ secrets.OBSIDIAN_COUCH_DB }}
+
+      - name: Offset sichern
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: offset.json
+          key: telegram-offset-${{ github.run_id }}
