@@ -96,9 +96,9 @@ def deepseek_parse(api_key, prompt, text):
 HELP_TEXT = (
     "Miau! 🐱 Ich bin der Shadow-Futterbot.\n\n"
     "Schreib mir einfach, was Shadow gefressen hat – z. B.:\n"
-    "• „SuperMono Wildschwein mag er"\n"
-    "• „Lifestage Geflügel und Lachs frisst er nicht"\n"
-    "• „Geflügel mit Pastinaken nur halb gefressen"\n\n"
+    "• „SuperMono Wildschwein mag er“\n"
+    "• „Lifestage Geflügel und Lachs frisst er nicht“\n"
+    "• „Geflügel mit Pastinaken nur halb gefressen“\n\n"
     "Ich trage es in die Futterliste ein und melde mich mit Bestätigung. ✅"
 )
 
@@ -119,7 +119,7 @@ def handle_message(text):
     notiz = str(parsed.get("notiz", "")).strip() or str(parsed.get("zusammenfassung", "")).strip()
 
     if not sorte:
-        return ("Hm, welche Sorte meinst du genau? 😺 Schreib z. B. „SuperMono Ente mag er".")
+        return ("Hm, welche Sorte meinst du genau? 😺 Schreib z. B. „SuperMono Ente mag er“.")
 
     now = datetime.now(BERLIN).strftime("%d.%m.%Y %H:%M")
     kern = f"{linie} {sorte}".strip()
