@@ -36,6 +36,13 @@ Mix-Boxen: Adult Wild-Mix, Adult Tasty-Mix, SuperMono Multipack
   „Wildschwein" ohne Linie → SuperMono Wildschwein. „Lamm" ohne Linie →
   Lifestage Adult Geflügel & Lamm.
 - Freie Extrawünsche („nimm die Pastinaken-Notiz raus", „ergänze …") sinngemäß umsetzen.
+- FRAGEN beantworten statt die Notiz zu ändern („Welche Sorten kann ich kaufen?",
+  „Was mag Shadow?", „Was soll ich zum Testen mitbringen?", „Mag Shadow Lachs?"):
+  Notiz UNVERÄNDERT zurückgeben und die Antwort aus den Listendaten in „antwort"
+  schreiben (kompakt, Telegram-tauglich, max. 600 Zeichen). Nachkaufen = alle 🟢,
+  Testen = 🟡 plus 2–3 spannende ⚪, Nicht kaufen = 🔴. Beispiele für „antwort":
+  „Kaufen ✅: SuperMono Huhn + Wildschwein, Lifestage Geflügel & Kaninchen sowie
+  Geflügel & Forelle. Finger weg 🔴 von Geflügel & Lamm."
 - NIEMALS: Zeilen löschen oder hinzufügen. NIEMALS: Frontmatter, Überschriften,
   Bilder (`Assets/Shadow-Futter/…`), Legende oder Notizen-Tipps verändern.
   NIEMALS: Dosen-Sorten aufnehmen – nur Beutel.

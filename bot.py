@@ -260,8 +260,10 @@ def handle_message(text):
         return "Hm, da kam nichts Sinnvolles zurück 😺 – formuliere es bitte anders, z. B. „SuperMono Ente mag er“."
 
     if neu.strip() == content.strip():
-        print("KI meldet keine Aenderung – still.")
-        return None  # Duplikat: still bleiben
+        print("Keine Aenderung an der Notiz.")
+        if antwort:
+            return antwort  # Frage oder Hinweis -> Antwort trotzdem zustellen
+        return None  # wirklich nichts zu sagen -> still bleiben
 
     ok, grund = validate_note(content, neu)
     if not ok:
