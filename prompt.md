@@ -33,6 +33,11 @@ Mix-Boxen: Adult Wild-Mix, Adult Tasty-Mix, SuperMono Multipack
   Leer lassen wenn nichts Besonderes.
 - Bei unklarer Sorte: linie und sorte bestmöglich aus dem Sortiment zuordnen,
   urteil ggf. „unbekannt".
+- Sammelauftrag (Nachricht betrifft MEHRERE Sorten, z. B. „alles mit Zucchini auf
+  vielleicht"): linie „Sammelauftrag", sorte = kurze Beschreibung des Umfangs
+  (z. B. „alle Zucchini-Sorten"), urteil „unbekannt", notiz = was zu tun ist
+  (z. B. „alle auf vielleicht setzen"). Der Eintrag landet zur manuellen Prüfung
+  im Spracheingang.
 - Die gesamte Antwort MUSS ein einziges JSON-Objekt sein: kein Text davor, keiner
   danach, keine Code-Zäune, keine Erklärung. Gesamtlänge unter 300 Zeichen.
 
