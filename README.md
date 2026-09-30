@@ -11,9 +11,10 @@ Telegram (@mauderbot) ──alle 5 Min──► GitHub Action ──► DeepSeek
                                                      ──► Obsidian: PC + Handys syncen automatisch
 ```
 
-- **Phase 1 (aktiv):** Der Bot schreibt nur in den 📥 Spracheingang von
-  `40_Privat/Haustiere/Shadow-Katzenfutter.md`. Die KI-Kuration (Tabelle, ✅/❌, 🛒)
-  übernimmt der Mensch bzw. Claudian.
+- **Phase 2 (aktiv):** Der Bot versteht Einzelmeldungen („SuperMono Ente mag er nicht")
+  und Sammelaufträge („alles mit Zucchini auf vielleicht") und pflegt **Tabelle und
+  🛒 Einkaufszettel direkt**. Unklare Fälle landen als ⚪-Eintrag im 📥 Spracheingang
+  zur manuellen Prüfung.
 - Alles läuft über **ausgehende HTTPS-Verbindungen** – nirgends offene Ports nötig.
 - Antworten kommen per Telegram-Bestätigung zurück.
 
