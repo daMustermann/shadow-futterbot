@@ -5,6 +5,10 @@ on:
     - cron: "*/5 * * * *"
   workflow_dispatch:
 
+permissions:
+  contents: read
+  actions: write
+
 concurrency:
   group: futterbot
   cancel-in-progress: false
@@ -50,3 +54,11 @@ jobs:
         with:
           path: offset.json
           key: telegram-offset-${{ github.run_id }}
+
+      - name: Notiz-Backup aufbewahren
+        if: hashFiles('backup-note.md') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: notiz-backup-${{ github.run_id }}
+          path: backup-note.md
+          retention-days: 90

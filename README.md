@@ -11,10 +11,11 @@ Telegram (@mauderbot) ──alle 5 Min──► GitHub Action ──► DeepSeek
                                                      ──► Obsidian: PC + Handys syncen automatisch
 ```
 
-- **Phase 2 (aktiv):** Der Bot versteht Einzelmeldungen („SuperMono Ente mag er nicht")
-  und Sammelaufträge („alles mit Zucchini auf vielleicht") und pflegt **Tabelle und
-  🛒 Einkaufszettel direkt**. Unklare Fälle landen als ⚪-Eintrag im 📥 Spracheingang
-  zur manuellen Prüfung.
+- **Modus B „KI editiert direkt" (aktiv):** DeepSeek bekommt die komplette Notiz
+  und liefert sie aktualisiert zurück. Der Bot prüft (Frontmatter, Abschnitte,
+  Sortenbestand, Bilder, Länge, Tabellen) und schreibt nur bei bestandener Prüfung.
+  Die Vorversion landet als Action-Artifact (90 Tage) – jederzeit wiederherstellbar.
+  Fällt die Prüfung durch, geht ein ⚪-Eintrag in den 📥 Spracheingang.
 - Alles läuft über **ausgehende HTTPS-Verbindungen** – nirgends offene Ports nötig.
 - Antworten kommen per Telegram-Bestätigung zurück.
 

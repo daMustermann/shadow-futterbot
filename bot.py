@@ -5,10 +5,13 @@ Laeuft als GitHub-Action alle paar Minuten (oder ueberall sonst mit Python 3.10+
 Alle Geheimnisse kommen aus Umgebungsvariablen, niemals aus Dateien.
 Der Telegram-Offset liegt in einer Datei (in Actions per Cache persistiert).
 
-Phase 2: Der Bot pflegt Tabelle UND Einkaufszettel direkt.
-- Einzelmeldung („SuperMono Ente mag er nicht") -> Zeile + Einkaufszettel werden aktualisiert.
-- Sammelauftrag („alles mit Zucchini auf vielleicht") -> alle passenden Zeilen werden aktualisiert.
-- Unklare/faellige Faelle -> ⚪-Eintrag in den 📥 Spracheingang zur manuellen Pruefung.
+Modus B („KI editiert direkt"):
+- DeepSeek bekommt die KOMPLETTE Notiz + deine Nachricht und liefert die fertige,
+  aktualisierte Notiz zurueck (als JSON: {"note": "...", "antwort": "..."}).
+- Der Bot PRUEFT die Rueckgabe (Struktur-Heil-Test, siehe validate_note) und schreibt
+  sie nur bei bestandener Pruefung. Davor sichert er die alte Version nach
+  backup-note.md (wird als Action-Artifact aufbewahrt).
+- Faellt Pruefung oder Schreiben durch: ⚪-Eintrag in den 📥 Spracheingang + Hinweis.
 """
 import json
 import os
@@ -23,21 +26,23 @@ from zoneinfo import ZoneInfo
 
 BERLIN = ZoneInfo("Europe/Berlin")
 NOTE_PATH = "40_Privat/Haustiere/Shadow-Katzenfutter.md"
+BACKUP_FILE = "backup-note.md"
+INBOX_MARKER = "## 📥 Spracheingang"
 TELEGRAM_API = "https://api.telegram.org/bot{token}/{method}"
 DEEPSEEK_API = "https://api.deepseek.com/chat/completions"
-EMOJI = {"ja": "🟢", "nein": "🔴", "vielleicht": "🟡", "unbekannt": "⚪"}
 MAX_AGE_SECONDS = 24 * 3600  # Nachrichten aelter als das werden still uebersprungen
-MAX_EDITS = 15  # Sicherheitsdeckel pro Nachricht
-SECTIONS = {
-    "SuperMono": ("## 🖤 SuperMono", "## 🤍 Lifestage"),
-    "Lifestage Adult": ("## 🤍 Lifestage", "## 🎁"),
-}
-LINIEN_EMOJI = {"SuperMono": "🖤", "Lifestage Adult": "🤍"}
-EINKAUF_ABSCHNITTE = {
-    "ja": "**Nachkaufen (🟢):**",
-    "nein": "**Nicht kaufen (🔴):**",
-    "vielleicht": "**Zum Testen mitbringen",
-}
+
+REQUIRED_HEADERS = [
+    "## 🔎 Legende",
+    "## 🖤 SuperMono 125 g",
+    "## 🤍 Lifestage Adult 125 g",
+    "## 🎁 Mix-Boxen",
+    "## 🍬 Extra Food",
+    "## 🛒 Einkaufszettel für den Laden",
+    "## 📥 Spracheingang",
+    "## 📝 Notizen / Tipps",
+]
+FRONTMATTER = "---\ntags: [privat/haustier]\ntyp: liste\n---"
 
 
 def env(name, required=True, default=None):
@@ -117,32 +122,42 @@ def extract_json(text):
     raise ValueError("kein vollständiges JSON gefunden")
 
 
-def deepseek_parse(api_key, model, prompt, text):
+def deepseek_edit(api_key, model, prompt, note, text):
     today = datetime.now(BERLIN).strftime("%d.%m.%Y")
     payload = {
         "model": model,
         "temperature": 0.2,
-        "max_tokens": 1500,
+        "max_tokens": 8000,
         "response_format": {"type": "json_object"},
         "messages": [
             {"role": "system", "content": prompt},
-            {"role": "user", "content": f"Heute ist der {today}. Nachricht: {text}"},
+            {"role": "user",
+             "content": f"Heute ist der {today}.\n\n--- AKTUELLE NOTIZ ---\n{note}\n"
+                        f"--- ENDE NOTIZ ---\n\nNachricht: {text}"},
         ],
     }
     resp = http_json(DEEPSEEK_API, payload,
-                     headers={"Authorization": f"Bearer {api_key}"}, timeout=90)
+                     headers={"Authorization": f"Bearer {api_key}"}, timeout=120)
     choice = resp["choices"][0]
     raw = choice["message"]["content"]
     if choice.get("finish_reason") != "stop":
-        print(f"DeepSeek finish_reason={choice.get('finish_reason')}, Rohantwort: {raw[:500]}")
+        print(f"DeepSeek finish_reason={choice.get('finish_reason')}")
     try:
-        return extract_json(raw)
+        return extract_json(strip_fences(raw))
     except ValueError:
         print(f"DeepSeek-Rohantwort (Parse-Fehler): {raw[:500]}")
         raise
 
 
-# ---------------------------------------------------------------- Tabellen-Logik
+def strip_fences(text):
+    """Entfernt ```markdown-Codezaeune, falls das Modell sie doch gesetzt hat."""
+    m = re.search(r"```(?:markdown|md)?\s*\n(.*?)```", text, re.DOTALL)
+    if m and "{" in m.group(1):
+        return m.group(1)
+    return text
+
+
+# ---------------------------------------------------------------- Pruefung
 
 def norm(s):
     s = (s or "").lower().replace("&", "und").replace("🆕", "")
@@ -150,7 +165,6 @@ def norm(s):
 
 
 def split_row(line):
-    """Zerlegt eine Markdown-Tabellenzeile in Zellen (ohne aeussere Pipes)."""
     s = line.strip()
     if not (s.startswith("|") and s.endswith("|")):
         return None
@@ -160,159 +174,62 @@ def split_row(line):
 def is_data_row(cells):
     return (cells is not None and len(cells) >= 6
             and not all(set(c) <= set("-: ") for c in cells)
-            and cells[0] != "Tüte" and cells[0] != "Zeichen")
+            and cells[0] not in ("Tüte", "Zeichen", "Box", "Sorte", "Linie"))
 
 
-def find_rows(lines):
-    """Sammelt Tabellenzeilen der beiden Hauptsektionen mit Sektionszuordnung."""
-    rows = []  # (zeilenindex, linie, zellen)
-    current = None
-    for i, line in enumerate(lines):
+def section_sort_names(text, start_marker, end_marker):
+    """Sortennamen (Spalte 2) aller Datenzeilen zwischen zwei Ueberschriften."""
+    inside, names = False, []
+    for line in text.splitlines():
         s = line.strip()
         if s.startswith("## "):
-            current = None
-            for linie, (start, _end) in SECTIONS.items():
-                if s.startswith(start):
-                    current = linie
-        if current and s.startswith("|"):
+            inside = s.startswith(start_marker)
+            continue
+        if inside and s.startswith("|"):
             cells = split_row(s)
             if is_data_row(cells):
-                rows.append((i, current, cells))
-    return rows
+                names.append(norm(cells[1]))
+    return names
 
 
-def match_row(rows, linie, sorte):
-    """Findet genau eine passende Zeile oder gibt (None, grund) zurueck."""
-    want_linie = (linie or "").strip()
-    want = norm(sorte)
-    if not want:
-        return None, "leere Sorte"
-    cands = [(i, l, c) for (i, l, c) in rows if norm(c[1]) == want]
-    if not cands:
-        cands = [(i, l, c) for (i, l, c) in rows
-                 if want in norm(c[1]) or norm(c[1]) in want]
-    if want_linie in SECTIONS:
-        in_linie = [c for c in cands if c[1] == want_linie]
-        if len(in_linie) == 1:
-            return in_linie[0], ""
-        if not in_linie:
-            return None, f"'{sorte}' nicht in Linie {want_linie} gefunden"
-        return None, f"'{sorte}' ist mehrdeutig ({len(in_linie)} Treffer)"
-    if len(cands) == 1:
-        return cands[0], ""
-    if not cands:
-        return None, f"keine Zeile für '{sorte}' gefunden"
-    return None, f"'{sorte}' ist mehrdeutig ({len(cands)} Treffer)"
-
-
-def rebuild_row(cells, status, note, today):
-    """Baut eine Zeile neu: Bild/Sorte/Extra bleiben, Status/Anmerkung/Datum neu."""
-    anm = note or ""
-    if not anm and cells[4] != "noch nicht getestet":
-        anm = cells[4]
-    if not anm:
-        anm = "–"
-    return [cells[0], cells[1], cells[2], status, anm, today]
-
-
-def einkauf_key(linie, sorte):
-    return norm(f"{linie} – {sorte}")
-
-
-def sync_einkaufszettel(lines, linie, sorte, extra, urteil, notiz):
-    """Entfernt alte Zeilen dieser Sorte aus allen drei Abschnitten und
-    haengt ggf. eine neue im passenden Abschnitt an. Gibt (lines, aktion) zurueck."""
-    key = einkauf_key(linie, sorte)
-    out, removed = [], False
-    for line in lines:
-        s = line.strip()
-        if s.startswith("- ") and key in norm(s):
-            removed = True
-            continue
-        out.append(line)
-    lines = out
-    if urteil == "unbekannt":
-        return lines, ("entfernt" if removed else "nichts zu tun")
-    le = LINIEN_EMOJI.get(linie, "")
-    extra_txt = f" mit {extra}" if (extra or "").strip() else ""
-    if urteil == "ja":
-        neu = f"- {le} {linie} – {sorte}{extra_txt}"
-        if linie == "SuperMono":
-            neu += " (schwarze Tüte)"
-        header = EINKAUF_ABSCHNITTE["ja"]
-    elif urteil == "nein":
-        neu = f"- {le} {linie} – {sorte}{extra_txt}"
-        header = EINKAUF_ABSCHNITTE["nein"]
-    else:
-        neu = f"- 🟡 {le} {linie} – {sorte}{extra_txt}"
-        if notiz:
-            neu += f" ({notiz})"
-        header = EINKAUF_ABSCHNITTE["vielleicht"]
-    idx = next((i for i, l in enumerate(lines) if header in l), None)
-    if idx is None:
-        return lines, "Einkaufszettel-Abschnitt fehlt"
-    j = idx + 1
-    while j < len(lines) and lines[j].strip().startswith("- "):
-        j += 1
-    lines.insert(j, neu + "\n")
-    return lines, "aktualisiert"
-
-
-def apply_edits(content, edits, today):
-    """Wendet Edits auf Notiztext an. Gibt (neuer_text, ergebnisse) zurueck.
-    ergebnisse: Liste von {edit, ok, detail}."""
-    lines = content.splitlines(keepends=True)
-    rows = find_rows(lines)
-    results = []
-    for edit in edits[:MAX_EDITS]:
-        linie = str(edit.get("linie", "")).strip()
-        sorte = str(edit.get("sorte", "")).strip()
-        urteil = str(edit.get("urteil", "unbekannt")).strip().lower()
-        notiz = str(edit.get("notiz", "")).strip()
-        if urteil not in EMOJI:
-            urteil = "unbekannt"
-        (match, grund) = match_row(rows, linie, sorte)
-        if match is None:
-            results.append({"edit": edit, "ok": False, "detail": grund})
-            continue
-        (ri, echte_linie, cells) = match
-        status = EMOJI[urteil] + (" ⭐" if urteil == "ja" else "")
-        neu = rebuild_row(cells, status, notiz, today)
-        alt_zeile = "| " + " | ".join(cells) + " |"
-        neu_zeile = "| " + " | ".join(neu) + " |"
-        if alt_zeile == neu_zeile:
-            results.append({"edit": edit, "ok": True, "detail": "bereits aktuell",
-                            "linie": echte_linie, "sorte": cells[1]})
-            continue
-        lines[ri] = neu_zeile + "\n"
-        extra = cells[2]
-        lines, einkauf = sync_einkaufszettel(lines, echte_linie, cells[1], extra,
-                                             urteil, notiz)
-        # Zeilenindex-Verschiebungen nachfuehren
-        rows = find_rows(lines)
-        results.append({"edit": edit, "ok": True,
-                        "detail": f"Zeile {EMOJI[urteil]}, Einkaufszettel {einkauf}",
-                        "linie": echte_linie, "sorte": cells[1]})
-    return "".join(lines), results
+def validate_note(old, new):
+    """Struktur-Heil-Test. Gibt (ok, grund) zurueck."""
+    if not new.startswith(FRONTMATTER):
+        return False, "Frontmatter fehlt/beschaedigt"
+    for h in REQUIRED_HEADERS:
+        if h not in new:
+            return False, f"Abschnitt fehlt: {h}"
+    for start, end in [("## 🖤 SuperMono", "## 🤍 Lifestage"),
+                       ("## 🤍 Lifestage", "## 🎁")]:
+        a, b = section_sort_names(old, start, end), section_sort_names(new, start, end)
+        if sorted(a) != sorted(b):
+            return False, f"Sorten veraendert in {start} (Zeile geloescht/hinzugefuegt?)"
+    old_imgs = set(re.findall(r"Assets/Shadow-Futter/[\w\-.]+\.png", old))
+    new_imgs = set(re.findall(r"Assets/Shadow-Futter/[\w\-.]+\.png", new))
+    if old_imgs - new_imgs:
+        return False, f"Bilder verloren: {sorted(old_imgs - new_imgs)[:3]}"
+    if not (0.7 * len(old) <= len(new) <= 1.3 * len(old)):
+        return False, "Laenge unplausibel (mehr als ±30 %)"
+    if new.count("|") < old.count("|") * 0.9:
+        return False, "Tabellenstruktur beschaedigt"
+    return True, "ok"
 
 
 def fallback_inbox(content, ursprung, hinweis):
-    """Haengt einen Sammel-/Problemfall in den 📥 Spracheingang an."""
     now = datetime.now(BERLIN).strftime("%d.%m.%Y %H:%M")
     line = f"\n- [{now} Telegram] ⚪ {hinweis} – Original: „{ursprung[:140]}“"
     if INBOX_MARKER not in content:
-        return content.rstrip("\n") + f"\n\n## 📥 Spracheingang\n{line}\n"
+        return content.rstrip("\n") + f"\n\n{INBOX_MARKER}\n{line}\n"
     return content.replace(INBOX_MARKER, INBOX_MARKER + "\n" + line, 1)
 
-
-INBOX_MARKER = "## 📥 Spracheingang"
 
 HELP_TEXT = (
     "Miau! 🐱 Ich bin der Shadow-Futterbot – ich pflege Shadows Futterliste direkt!\n\n"
     "Schreib mir z. B.:\n"
     "• „SuperMono Wildschwein mag er“\n"
     "• „Lifestage Geflügel und Lachs frisst er nicht“\n"
-    "• „Alles mit Zucchini auf vielleicht“\n\n"
+    "• „Alles mit Zucchini auf vielleicht“\n"
+    "• Sogar Extrawünsche wie „nimm die Pastinaken-Notiz raus“\n\n"
     "Ich trage es in Tabelle + Einkaufszettel ein. ✅"
 )
 
@@ -320,64 +237,52 @@ HELP_TEXT = (
 def handle_message(text):
     """Verarbeitet eine Nachricht. Gibt Antworttext zurueck (None = still)."""
     try:
-        parsed = deepseek_parse(CFG["deepseek_key"], CFG["deepseek_model"],
-                                CFG["prompt"], text)
-    except Exception as e:
-        print(f"DeepSeek-Fehler: {e}")
-        return "Hoppala 😿 – das habe ich gerade nicht verstanden. Schreib es mir bitte noch einmal anders."
-
-    edits = parsed.get("edits") or []
-    rueckfrage = str(parsed.get("rueckfrage", "")).strip()
-    if not edits:
-        if rueckfrage:
-            return rueckfrage
-        return "Hm, damit kann ich nichts anfangen 😺 – schreib z. B. „SuperMono Ente mag er“."
-
-    try:
         content = obsidian_cli("read", NOTE_PATH)
     except Exception as e:
         print(f"Lese-Fehler: {e}")
         return "Au weia 😿 – ich komme gerade nicht an die Futterliste. Ich versuche es beim nächsten Durchlauf erneut."
 
-    today = datetime.now(BERLIN).strftime("%d.%m.%Y")
     try:
-        neu, results = apply_edits(content, edits, today)
+        parsed = deepseek_edit(CFG["deepseek_key"], CFG["deepseek_model"],
+                               CFG["prompt"], content, text)
+        neu = parsed.get("note", "")
+        antwort = str(parsed.get("antwort", "")).strip()
     except Exception as e:
-        print(f"Anwendungs-Fehler: {e}")
-        return "Au weia 😿 – beim Eintragen ist etwas schiefgelaufen. Es wurde nichts verändert."
+        print(f"DeepSeek-Fehler: {e}")
+        try:
+            obsidian_write(NOTE_PATH, fallback_inbox(
+                content, text, "KI-Antwort unverstaendlich"))
+        except Exception as e2:
+            print(f"Inbox-Fallback fehlgeschlagen: {e2}")
+        return "Hoppala 😿 – das habe ich gerade nicht verstanden. Es liegt im 📥 Spracheingang, ich schaue es mir beim nächsten Mal genauer an."
 
-    ok = [r for r in results if r["ok"]]
-    fail = [r for r in results if not r["ok"]]
-    if fail:
-        hinweise = "; ".join(
-            f"{(f['edit'].get('linie') or '')} {(f['edit'].get('sorte') or '')}".strip()
-            + f" ({f['detail']})" for f in fail)
-        neu = fallback_inbox(neu, text, f"Sammelauftrag/unklar: {hinweise}")
+    if not neu or not neu.strip():
+        return "Hm, da kam nichts Sinnvolles zurück 😺 – formuliere es bitte anders, z. B. „SuperMono Ente mag er“."
+
+    if neu.strip() == content.strip():
+        print("KI meldet keine Aenderung – still.")
+        return None  # Duplikat: still bleiben
+
+    ok, grund = validate_note(content, neu)
+    if not ok:
+        print(f"Validierung FEHLGESCHLAGEN: {grund}")
+        try:
+            obsidian_write(NOTE_PATH, fallback_inbox(
+                content, text, f"Pruefung durchgefallen ({grund})"))
+        except Exception as e2:
+            print(f"Inbox-Fallback fehlgeschlagen: {e2}")
+        return ("Das war mir zu heikel 😿 – meine Prüfung hat einen Fehler gefunden, "
+                "deshalb habe ich nichts verändert. Der Wunsch liegt im 📥 Spracheingang.")
+
     try:
-        obsidian_write(NOTE_PATH, neu)
+        with open(CFG["backup_file"], "w", encoding="utf-8") as f:
+            f.write(content)
+        obsidian_write(NOTE_PATH, neu if neu.endswith("\n") else neu + "\n")
     except Exception as e:
         print(f"Schreib-Fehler: {e}")
         return "Au weia 😿 – das Speichern hat nicht geklappt. Es wurde nichts verändert."
 
-    zeilen = []
-    for r in ok:
-        e = r["edit"]
-        u = str(e.get("urteil", "unbekannt")).lower()
-        emoji = EMOJI.get(u, "⚪")
-        extra = f" – {e['notiz']}" if str(e.get("notiz", "")).strip() else ""
-        zeilen.append(f"• {r.get('linie', '')} {r.get('sorte', '')} → {emoji}{extra}")
-    antwort = "Erledigt ✅"
-    if len(ok) == 1:
-        antwort = f"Eingetragen ✅: {zeilen[0][2:]}"
-    elif ok:
-        antwort = "Erledigt ✅:\n" + "\n".join(zeilen)
-    if ok and all(r["detail"] == "bereits aktuell" for r in ok):
-        return None  # Duplikat: still bleiben
-    if fail:
-        antwort += f"\n\n⚪ {len(fail)} Punkt(e) habe ich in den 📥 Spracheingang gelegt – bitte prüfen."
-    if ok:
-        antwort += "\nTabelle + 🛒 Einkaufszettel sind aktuell."
-    return antwort
+    return antwort or "Erledigt ✅ – Tabelle + 🛒 Einkaufszettel sind aktuell."
 
 
 # ---------------------------------------------------------------- Ablauf
@@ -456,6 +361,7 @@ if __name__ == "__main__":
         "deepseek_key": env("DEEPSEEK_API_KEY"),
         "deepseek_model": os.environ.get("DEEPSEEK_MODEL", "deepseek-flash"),
         "offset_file": os.environ.get("OFFSET_FILE", "offset.json"),
+        "backup_file": os.environ.get("BACKUP_FILE", "backup-note.md"),
         "couch": {
             "url": env("OBSIDIAN_COUCH_URL"),
             "user": env("OBSIDIAN_COUCH_USER"),
