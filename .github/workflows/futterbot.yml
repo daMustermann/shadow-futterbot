@@ -33,8 +33,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: offset.json
-          key: telegram-offset-${{ github.run_id }}
-          restore-keys: telegram-offset-
+          key: telegram-offset
 
       - name: Telegram abholen & Futterliste pflegen
         run: python bot.py
@@ -53,7 +52,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: offset.json
-          key: telegram-offset-${{ github.run_id }}
+          key: telegram-offset
 
       - name: Notiz-Backup aufbewahren
         if: hashFiles('backup-note.md') != ''
